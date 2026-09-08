@@ -1,0 +1,7 @@
+{
+  "name": "HealOps",
+  "description": "HealOps - Autonomous Self-Healing DevSecOps Platform with real-time CI/CD pipeline automation, intelligent incident diagnosis, container recovery, and multi-cloud security scanning.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

@@ -1,0 +1,56 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "DevSecOps managed microservice or repository",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 128 },
+        "repository": { "type": "string", "maxLength": 256 },
+        "branch": { "type": "string", "maxLength": 64 },
+        "healthScore": { "type": "number" },
+        "securityScore": { "type": "number" },
+        "status": { "type": "string", "enum": ["HEALTHY", "DEGRADED", "CRITICAL"] }
+      },
+      "required": ["name", "repository", "branch", "status"]
+    },
+    "Pipeline": {
+      "title": "Pipeline",
+      "description": "CI/CD Pipeline execution record",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "projectName": { "type": "string" },
+        "commitHash": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "RUNNING", "SUCCESS", "FAILED", "WARNING", "CANCELLED"] }
+      },
+      "required": ["projectId", "commitHash", "status"]
+    },
+    "Incident": {
+      "title": "Incident",
+      "description": "Production or pipeline health incident",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+        "service": { "type": "string" },
+        "status": { "type": "string", "enum": ["OPEN", "INVESTIGATING", "HEALING", "RESOLVED"] }
+      },
+      "required": ["title", "severity", "service", "status"]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Stores managed projects and source repository configurations"
+    },
+    "/pipelines/{pipelineId}": {
+      "schema": "Pipeline",
+      "description": "Stores CI/CD pipeline execution runs and stage statuses"
+    },
+    "/incidents/{incidentId}": {
+      "schema": "Incident",
+      "description": "Stores active and resolved incidents with root cause analysis"
+    }
+  }
+}
