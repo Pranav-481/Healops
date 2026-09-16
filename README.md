@@ -1,26 +1,141 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# 🚀 HealOps — Autonomous Self-Healing DevSecOps Platform
 
-# HealOps
+<p align="center">
+  <strong>AI-Powered DevSecOps • Intelligent Incident Response • Automated Self-Healing • CI/CD Automation</strong>
+</p>
 
-HealOps runs in two deliberately separate modes:
+<p align="center">
+  <a href="https://healops-26918.web.app/">
+    🌐 <strong>LIVE WEBSITE</strong>
+  </a>
+</p>
 
-- `DEMO_MODE=true` is a safe presentation environment. It stores state locally and simulates infrastructure actions.
-- `DEMO_MODE=false` requires a valid Bearer token and executes configured Git, test, security-scanner, Docker, Kubernetes, and Prometheus operations. Never use a production cluster until you have reviewed the access policies and tested in a non-production namespace.
+---
 
-## Run locally
+## 🌐 Live Demo
 
-1. Copy `.env.example` to `.env` and keep `DEMO_MODE=true`.
-2. Run `npm install` and `npm run dev`.
-3. Build with `npm run build`; serve the production bundle with `npm start`.
+### 🔗 HealOps Web Application
 
-## Enabling live operations
+👉 **https://healops-26918.web.app/**
 
-Set `DEMO_MODE=false`, define a strong `API_TOKENS` value, restrict `ALLOWED_ORIGINS`, configure `PROMETHEUS_URL`, `KUBERNETES_NAMESPACE`, and `CONTAINER_REGISTRY`, then deploy the backend where these executables are installed and authenticated: `git`, `npm`, `semgrep`, `trivy`, `gitleaks`, `docker`, and `kubectl`.
+HealOps is an AI-powered DevSecOps platform designed to monitor applications, detect incidents, analyze failures, automate recovery operations, and provide centralized visibility into CI/CD, security, deployments, monitoring, and infrastructure.
 
-All write operations require an authenticated role. Rollbacks and any action marked `requiresApproval` additionally require `approved: true` from an `ADMIN` user. Pipeline repositories must be HTTPS or SSH Git URLs. Pipeline source is isolated under `WORKSPACE_ROOT`; it is not executed through a shell.
+---
 
-## API usage
+## 📌 About HealOps
 
-In live mode send `Authorization: Bearer <token>` with every `/api` request. Create a project with its Git repository, then trigger a pipeline using `POST /api/pipelines/:id/run` with `{ "projectId": "..." }` (or a previous pipeline id). The backend returns `202` immediately and emits server-sent events as stages progress.
+**HealOps** is an autonomous **Self-Healing DevSecOps Platform** that combines Artificial Intelligence, DevOps automation, security, monitoring, and automated incident recovery.
+
+The platform is designed to help development and operations teams detect problems, understand their root causes, and execute recovery actions with minimal manual intervention.
+
+### 🎯 Main Objectives
+
+- Automate DevOps operations
+- Monitor applications and infrastructure
+- Detect incidents automatically
+- Analyze incidents using AI
+- Perform automated self-healing
+- Integrate security into CI/CD
+- Monitor deployments and pipelines
+- Provide centralized operational visibility
+- Reduce manual intervention during failures
+
+---
+
+# ✨ Key Features
+
+## 📊 Dashboard
+
+The centralized dashboard provides an overview of the DevOps environment.
+
+- System health
+- Pipeline status
+- Deployment status
+- Incident statistics
+- Security status
+- Resource monitoring
+- Recent activities
+- Operational metrics
+
+---
+
+## 🔄 CI/CD Pipeline Automation
+
+Manage and monitor CI/CD pipelines from a centralized interface.
+
+- Create pipelines
+- Run pipelines
+- Cancel pipelines
+- Monitor pipeline execution
+- View pipeline history
+- Track build status
+- Track deployment status
+
+---
+
+## 🚀 Deployment Management
+
+Monitor and manage application deployments.
+
+- Deployment tracking
+- Version information
+- Deployment history
+- Deployment status
+- Rollback operations
+- Recovery operations
+
+---
+
+## 🩺 Intelligent Incident Management
+
+HealOps provides centralized incident management.
+
+- Incident detection
+- Incident simulation
+- Incident tracking
+- Severity classification
+- Incident diagnosis
+- Root-cause analysis
+- Incident history
+
+---
+
+## 🤖 AI Assistant
+
+HealOps integrates AI capabilities to assist DevOps teams.
+
+The AI assistant can help with:
+
+- Incident analysis
+- Error diagnosis
+- Root-cause analysis
+- DevOps troubleshooting
+- Recovery recommendations
+- Operational questions
+
+---
+
+## 🛠️ Self-Healing Engine
+
+The self-healing engine is one of the core components of HealOps.
+
+It is designed to automatically respond to detected failures using predefined recovery operations.
+
+### Self-Healing Workflow
+
+```text
+System Failure
+      ↓
+Incident Detection
+      ↓
+Health Analysis
+      ↓
+AI Diagnosis
+      ↓
+Recovery Action Selection
+      ↓
+Self-Healing Execution
+      ↓
+Health Verification
+      ↓
+System Recovery
