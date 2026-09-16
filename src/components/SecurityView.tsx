@@ -40,7 +40,7 @@ export const SecurityView: React.FC<SecurityViewProps> = ({
     const matchesSeverity = severityFilter === 'ALL' || v.severity === severityFilter;
     const matchesSearch =
       v.cveId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      v.package.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (v.packageName || (v as any).package || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       v.description.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesScanner && matchesSeverity && matchesSearch;
   });

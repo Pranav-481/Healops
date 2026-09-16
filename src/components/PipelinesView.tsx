@@ -19,13 +19,14 @@ import {
 } from 'lucide-react';
 import { GlassCard } from './GlassCard';
 import { GlassButton } from './GlassButton';
-import { Pipeline, PipelineStage, LogEntry } from '../types';
+import { Pipeline, PipelineStage, LogEntry, Project } from '../types';
 
 interface PipelinesViewProps {
   pipelines: Pipeline[];
   terminalLogs: LogEntry[];
-  onTriggerPipeline: (failHealthCheck?: boolean) => void;
+  onTriggerPipeline: (failHealthCheck?: boolean, customOptions?: { projectId?: string; projectName?: string; commitMessage?: string; branch?: string }) => void;
   isRunning: boolean;
+  projects?: Project[];
 }
 
 export const PipelinesView: React.FC<PipelinesViewProps> = ({
@@ -33,6 +34,7 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({
   terminalLogs,
   onTriggerPipeline,
   isRunning,
+  projects = [],
 }) => {
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>(
     pipelines[0]?.id || 'pipe-501'
@@ -40,6 +42,13 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({
   const [logSearch, setLogSearch] = useState('');
   const [isLogPaused, setIsLogPaused] = useState(false);
   const [copiedLog, setCopiedLog] = useState(false);
+
+  // Custom Run Modal State
+  const [isCustomRunModalOpen, setIsCustomRunModalOpen] = useState(false);
+  const [targetProjectId, setTargetProjectId] = useState(projects[0]?.id || 'proj-1');
+  const [customBranch, setCustomBranch] = useState('main');
+  const [customCommitMessage, setCustomCommitMessage] = useState('feat: manual pipeline trigger from console');
+  const [customFailHealthCheck, setCustomFailHealthCheck] = useState(false);
 
   const selectedPipeline =
     pipelines.find((p) => p.id === selectedPipelineId) || pipelines[0];
@@ -87,13 +96,22 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({
 
         <div className="flex items-center gap-2.5 flex-wrap">
           <GlassButton
+            variant="secondary"
+            size="sm"
+            icon={<Play className="w-3.5 h-3.5 text-indigo-600" />}
+            isLoading={isRunning}
+            onClick={() => setIsCustomRunModalOpen(true)}
+          >
+            Custom Run...
+          </GlassButton>
+          <GlassButton
             variant="primary"
             size="sm"
             icon={<Play className="w-3.5 h-3.5" />}
             isLoading={isRunning}
             onClick={() => onTriggerPipeline(false)}
           >
-            Run Pipeline
+            Run Default Pipeline
           </GlassButton>
           <GlassButton
             variant="danger"
@@ -290,6 +308,126 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({
           })}
         </div>
       </GlassCard>
+
+      {/* Custom Pipeline Run Modal */}
+      {isCustomRunModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/30 backdrop-blur-md">
+          <GlassCard className="max-w-lg w-full p-6 space-y-4 shadow-2xl border-white/90">
+            <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600">
+                  <Play className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-display tracking-wide text-slate-900">
+                    Dispatch Custom CI/CD Pipeline
+                  </h3>
+                  <p className="text-xs text-slate-500">Configure target microservice and canary validation</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCustomRunModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Target Microservice Project
+                </label>
+                <select
+                  value={targetProjectId}
+                  onChange={(e) => setTargetProjectId(e.target.value)}
+                  className="w-full bg-white/80 border border-slate-200 text-xs sm:text-sm text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400 font-medium cursor-pointer"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.environment})
+                    </option>
+                  ))}
+                  {projects.length === 0 && (
+                    <option value="proj-1">Payment Service (production)</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Git Branch
+                </label>
+                <input
+                  type="text"
+                  value={customBranch}
+                  onChange={(e) => setCustomBranch(e.target.value)}
+                  className="w-full bg-white/80 border border-slate-200 text-xs sm:text-sm text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Trigger / Commit Message
+                </label>
+                <input
+                  type="text"
+                  value={customCommitMessage}
+                  onChange={(e) => setCustomCommitMessage(e.target.value)}
+                  className="w-full bg-white/80 border border-slate-200 text-xs sm:text-sm text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 text-xs space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={customFailHealthCheck}
+                    onChange={(e) => setCustomFailHealthCheck(e.target.checked)}
+                    className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                  />
+                  <span className="font-semibold text-slate-800">
+                    Simulate Synthetic Canary Probe Failure (Stage 10)
+                  </span>
+                </label>
+                <p className="text-[11px] text-slate-500 pl-5">
+                  When enabled, the pipeline will fail at the health-check stage to trigger SRE anomaly alerts and autonomous self-healing recovery.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-200/60">
+                <GlassButton
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsCustomRunModalOpen(false)}
+                >
+                  Cancel
+                </GlassButton>
+                <GlassButton
+                  type="button"
+                  variant={customFailHealthCheck ? 'danger' : 'primary'}
+                  size="sm"
+                  isLoading={isRunning}
+                  icon={<Play className="w-3.5 h-3.5" />}
+                  onClick={() => {
+                    const sel = projects.find((p) => p.id === targetProjectId);
+                    onTriggerPipeline(customFailHealthCheck, {
+                      projectId: targetProjectId,
+                      projectName: sel?.name || 'Payment Service',
+                      branch: customBranch,
+                      commitMessage: customCommitMessage
+                    });
+                    setIsCustomRunModalOpen(false);
+                  }}
+                >
+                  Dispatch Pipeline
+                </GlassButton>
+              </div>
+            </div>
+          </GlassCard>
+        </div>
+      )}
     </div>
   );
 };

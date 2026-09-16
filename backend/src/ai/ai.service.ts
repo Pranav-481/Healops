@@ -1,5 +1,31 @@
 import { GoogleGenAI } from '@google/genai';
-import { AIAnalysis, RiskLevel } from '../../../src/types';
+import { AIAnalysis, RiskLevel, Project, Pipeline, Deployment, Vulnerability, Incident, ServiceHealth } from '../../../src/types';
+
+export interface AIActionProposal {
+  type: 'TRIGGER_PIPELINE' | 'ROLLBACK' | 'RESTART_POD' | 'SECURITY_SCAN' | 'RESOLVE_VULN' | 'CREATE_PROJECT' | 'SIMULATE_INCIDENT';
+  title: string;
+  description: string;
+  serviceName?: string;
+  payload?: any;
+}
+
+export interface AIChatResult {
+  explanation: string;
+  evidence: string[];
+  recommendations: string[];
+  confidence: number;
+  risk: RiskLevel;
+  action?: AIActionProposal;
+}
+
+export interface SystemPlatformContext {
+  projects?: Project[];
+  pipelines?: Pipeline[];
+  deployments?: Deployment[];
+  vulnerabilities?: Vulnerability[];
+  incidents?: Incident[];
+  servicesHealth?: ServiceHealth[];
+}
 
 export class AIService {
   private aiClient: GoogleGenAI | null = null;
@@ -107,25 +133,44 @@ Respond with a JSON object matching this schema:
     };
   }
 
-  public async chatAssistant(message: string, history: Array<{ role: string; text: string }>): Promise<{
-    explanation: string;
-    evidence: string[];
-    recommendation: string;
-    confidence: number;
-    risk: RiskLevel;
-  }> {
+  public async chatAssistant(
+    message: string,
+    history: Array<{ role: string; text?: string; parts?: Array<{ text: string }> }>,
+    context?: SystemPlatformContext
+  ): Promise<AIChatResult> {
+    const lower = (message || '').toLowerCase().trim();
+
+    // 1. If Gemini API is available, ask the model with platform context and action function schema
     if (this.hasRealKey && this.aiClient) {
       try {
-        const prompt = `You are the DevSecOps Autonomous Self-Healing Platform Assistant.
-User question: "${message}"
+        const sysContextStr = JSON.stringify({
+          activeIncidents: context?.incidents?.map(i => ({ id: i.id, title: i.title, status: i.status, service: i.service })) || [],
+          servicesHealth: context?.servicesHealth?.map(s => ({ name: s.name, status: s.status, latency: s.latencyMs, errorRate: s.errorRate })) || [],
+          projects: context?.projects?.map(p => ({ id: p.id, name: p.name, status: p.status })) || [],
+          recentDeployments: context?.deployments?.slice(0, 3).map(d => ({ id: d.id, project: d.projectName, version: d.version, status: d.status })) || []
+        });
 
-Respond strictly with a JSON object:
+        const prompt = `You are HealOps Copilot, an autonomous DevSecOps and SRE platform agent.
+Current Platform Telemetry State:
+${sysContextStr}
+
+User instruction / question: "${message}"
+
+Determine if the user is asking to execute an action (e.g. rollback, restart pod, run pipeline, scan security, create project, resolve vulnerability) or asking an engineering question.
+Respond strictly with a JSON object in this format:
 {
-  "explanation": "Clear, concise engineering diagnostic explanation",
-  "evidence": ["point 1", "point 2"],
-  "recommendation": "Prescriptive remediation step",
-  "confidence": 95,
-  "risk": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+  "explanation": "Clear, direct engineering response addressing user's request",
+  "evidence": ["telemetry point 1", "telemetry point 2"],
+  "recommendations": ["step 1", "step 2"],
+  "confidence": 0.95,
+  "risk": "LOW" | "MEDIUM" | "HIGH" | "CRITICAL",
+  "action": null or {
+    "type": "ROLLBACK" | "RESTART_POD" | "TRIGGER_PIPELINE" | "SECURITY_SCAN" | "RESOLVE_VULN" | "CREATE_PROJECT" | "SIMULATE_INCIDENT",
+    "title": "Action Title",
+    "description": "Short explanation of what will be performed",
+    "serviceName": "Affected service name",
+    "payload": {}
+  }
 }`;
 
         const response = await this.aiClient.models.generateContent({
@@ -137,78 +182,266 @@ Respond strictly with a JSON object:
         });
 
         if (response.text) {
-          return JSON.parse(response.text);
+          const parsed = JSON.parse(response.text);
+          return {
+            explanation: parsed.explanation || 'Request processed successfully.',
+            evidence: parsed.evidence || [],
+            recommendations: parsed.recommendations || parsed.recommendation ? [parsed.recommendation] : [],
+            confidence: parsed.confidence || 0.95,
+            risk: parsed.risk || 'LOW',
+            action: parsed.action || undefined
+          };
         }
       } catch (err) {
-        console.warn('[AIService] Chat generation fallback triggered:', err);
+        console.warn('[AIService] Gemini Chat generation error, using intelligent agentic fallback:', err);
       }
     }
 
-    // Mock Provider responses for standard DevSecOps queries
-    const lower = message.toLowerCase();
-    if (lower.includes('pipeline') || lower.includes('fail')) {
+    // 2. Intelligent agentic rule-based execution engine
+    // Check if the user is requesting specific actions:
+
+    // A. ROLLBACK REQUEST
+    if (lower.includes('rollback') || lower.includes('revert') || lower.includes('undo deploy')) {
+      const targetDep = context?.deployments?.find(d => d.status === 'FAILED' || d.projectName.toLowerCase().includes('payment')) || context?.deployments?.[0];
       return {
-        explanation: 'Pipeline pipe-501 failed at the Synthetic Health Check stage because the canary probe exceeded the 800ms SLA threshold (received 2,400ms HTTP 504).',
+        explanation: `Understood. Rollback sequence identified for ${targetDep ? targetDep.projectName : 'Payment Service'} (from ${targetDep?.version || 'v2.14.0'} to ${targetDep?.rollbackVersion || 'v2.13.9'}). This will shift live Kubernetes cluster ingress traffic back to the verified stable release in ~38 seconds.`,
         evidence: [
-          'Stage 1 through 9 (Source to Deploy) succeeded in 164s',
-          'Stage 10 Health Check timed out during synthetic checkout simulation',
-          'Database query latency increased by 312% post-build'
+          `Current version ${targetDep?.version || 'v2.14.0'} telemetry has elevated error rate (18.4%)`,
+          `Target rollback baseline ${targetDep?.rollbackVersion || 'v2.13.9'} maintained 99.98% uptime with 28ms latency`,
+          'Zero-downtime blue/green traffic switch verified'
         ],
-        recommendation: 'Run automated container restart or rollback to v2.13.9 to restore API availability.',
-        confidence: 96,
-        risk: 'HIGH'
+        recommendations: [
+          'Click the button below to execute production cluster rollback',
+          'Synthetic health checks will validate ingress traffic post-switch'
+        ],
+        confidence: 0.98,
+        risk: 'HIGH',
+        action: {
+          type: 'ROLLBACK',
+          title: `Rollback ${targetDep?.projectName || 'Payment Service'}`,
+          description: `Execute rolling rollback from ${targetDep?.version || 'v2.14.0'} to ${targetDep?.rollbackVersion || 'v2.13.9'}`,
+          serviceName: targetDep?.projectName || 'Payment Service',
+          payload: { id: targetDep?.id || 'dep-102', deployment: targetDep }
+        }
       };
     }
 
-    if (lower.includes('production') || lower.includes('unhealthy') || lower.includes('incident')) {
+    // B. RESTART POD / SELF-HEAL REQUEST
+    if (lower.includes('restart') || lower.includes('heal') || lower.includes('pod') || lower.includes('fix incident') || lower.includes('remediate')) {
+      const activeInc = context?.incidents?.find(i => i.status !== 'RESOLVED') || context?.incidents?.[0];
+      const restartAction = activeInc?.healingActions?.find(a => a.actionType === 'RESTART_POD') || activeInc?.healingActions?.[0];
+
       return {
-        explanation: 'Production is currently in a DEGRADED state because Payment Service error rate spiked to 18.4%.',
+        explanation: `Executing container pod recycle for ${activeInc?.service || 'Payment Service'}. This flushes orphaned database connection pool sockets and resets keep-alive handles without interrupting healthy replicas.`,
         evidence: [
-          'Prometheus alert firing: HTTP 500 error rate > 5%',
-          'Database connection pool starvation detected on payment pods',
-          'Canary rollout version v2.14.0 introduced unclosed socket handles'
+          'Active DB connection count reached ceiling (120/120)',
+          'Thread starvation detected across worker processes',
+          'Rolling restart will cycle 1 pod at a time behind cluster Service'
         ],
-        recommendation: 'Trigger the Self-Healing Engine to restart the payment pods or approve the pending production rollback.',
-        confidence: 94,
-        risk: 'HIGH'
+        recommendations: [
+          'Execute container restart sequence now',
+          'Observe error rate regression waveform in live telemetry'
+        ],
+        confidence: 0.96,
+        risk: 'LOW',
+        action: {
+          type: 'RESTART_POD',
+          title: `Restart ${activeInc?.service || 'Payment Service'} Pods`,
+          description: 'Recycle Kubernetes pods to clear leaked connection handles',
+          serviceName: activeInc?.service || 'Payment Service',
+          payload: { incident: activeInc, action: restartAction }
+        }
       };
     }
 
-    if (lower.includes('rollback')) {
+    // C. RUN CI/CD PIPELINE REQUEST
+    if (lower.includes('pipeline') || lower.includes('build') || lower.includes('deploy') || lower.includes('run pipe')) {
+      const project = context?.projects?.[0];
+      const shouldFail = lower.includes('fail') || lower.includes('test fail') || lower.includes('break');
+
       return {
-        explanation: 'A rollback to v2.13.9 is strongly recommended. Telemetry confirms v2.13.9 operated with 99.98% uptime and 28ms average response latency.',
+        explanation: `Ready to trigger the automated 10-stage CI/CD pipeline for ${project?.name || 'Payment Service'}. Stages include Source Checkout, Dependency Audit, Semgrep SAST, Trivy Container CVE scan, and Synthetic Canary Health Check.`,
         evidence: [
-          'Stable baseline version v2.13.9 had zero connection pool exhaustion errors',
-          'Current v2.14.0 canary pods are dropping 18.4% of transactions'
+          '10 deterministic stages configured in pipeline engine',
+          'Semgrep and Gitleaks rulesets validated',
+          'Kubernetes rolling deployment target: Production cluster'
         ],
-        recommendation: 'Click "Approve Rollback" in the Self-Healing or Deployment center. It executes in approximately 38 seconds.',
-        confidence: 98,
-        risk: 'HIGH'
+        recommendations: [
+          shouldFail ? 'Pipeline will simulate health probe failure for diagnostic testing' : 'Standard clean build and deployment',
+          'Real-time stage execution and terminal logs will stream to the console'
+        ],
+        confidence: 0.95,
+        risk: 'MEDIUM',
+        action: {
+          type: 'TRIGGER_PIPELINE',
+          title: `Run CI/CD Pipeline (${project?.name || 'Payment Service'})`,
+          description: `Dispatches 10-stage build & deployment for ${project?.name || 'Payment Service'}`,
+          serviceName: project?.name || 'Payment Service',
+          payload: { pipelineId: 'pipe-501', failHealthCheck: shouldFail }
+        }
       };
     }
 
-    if (lower.includes('vulnerabilit') || lower.includes('critical') || lower.includes('security')) {
+    // D. RUN SECURITY SCAN REQUEST
+    if (lower.includes('scan') || lower.includes('audit') || lower.includes('security') || lower.includes('trivy') || lower.includes('semgrep')) {
       return {
-        explanation: 'Two CRITICAL vulnerabilities require immediate attention: CVE-2024-3094 in xz-utils (container layer) and GL-SECRET-8821 (hardcoded AWS key in cloud-storage.ts).',
+        explanation: 'Initiating full multi-scanner security audit across SAST (Semgrep), SCA (Trivy), and Secret Scanning (Gitleaks) for all active microservices.',
         evidence: [
-          'Trivy scanner detected CVE-2024-3094 in base Docker image',
-          'Gitleaks scanner found active AWS Access Key ID committed to repository branch'
+          'Container base images and lockfiles queued for inspection',
+          'Zero-day signature databases synchronized',
+          '412 packages across container layers targeted'
         ],
-        recommendation: 'Rotate the compromised AWS secret immediately via IAM, and update base Dockerfile to Debian 12.5 bookworm.',
-        confidence: 99,
-        risk: 'CRITICAL'
+        recommendations: [
+          'Run multi-scanner audit now to update security posture score',
+          'Check findings table for available automated patch recipes'
+        ],
+        confidence: 0.99,
+        risk: 'LOW',
+        action: {
+          type: 'SECURITY_SCAN',
+          title: 'Execute Multi-Scanner Security Audit',
+          description: 'Scan containers, dependencies, and git trees with Trivy, Semgrep & Gitleaks'
+        }
       };
     }
 
+    // E. RESOLVE VULNERABILITY REQUEST
+    if (lower.includes('cve') || lower.includes('patch') || lower.includes('fix vuln') || lower.includes('resolve vuln')) {
+      const targetVuln = context?.vulnerabilities?.find(v => v.status === 'OPEN') || context?.vulnerabilities?.[0];
+      return {
+        explanation: `Ready to apply automated remediation patch for ${targetVuln?.cveId || 'CVE-2024-3094'} (${targetVuln?.packageName || 'xz-utils'}). This will update Dockerfile base layer and mark the CVE as resolved.`,
+        evidence: [
+          `Current vulnerable version: ${targetVuln?.currentVersion || '5.6.0'}`,
+          `Patched target version: ${targetVuln?.fixedVersion || '5.6.1'}`,
+          `Impact: ${targetVuln?.impact || 'Remote code execution risk mitigated'}`
+        ],
+        recommendations: [
+          'Apply patch to container image configuration',
+          'Verify container scanner status on next build'
+        ],
+        confidence: 0.97,
+        risk: 'MEDIUM',
+        action: {
+          type: 'RESOLVE_VULN',
+          title: `Patch & Resolve ${targetVuln?.cveId || 'CVE-2024-3094'}`,
+          description: `Update ${targetVuln?.packageName || 'package'} to safe version and update inventory`,
+          payload: { id: targetVuln?.id || 'vuln-1' }
+        }
+      };
+    }
+
+    // F. CREATE PROJECT REQUEST
+    if (lower.includes('create project') || lower.includes('add project') || lower.includes('new project') || lower.includes('new service') || lower.includes('add service')) {
+      // Extract project name if user specified one (e.g. "create project api-gateway" or "add project Payment Gateway")
+      let extractedName = 'Analytics Ingestion Service';
+      const match = message.match(/(?:project|service)\s+(?:called\s+|named\s+)?([A-Za-z0-9-_ ]+)/i);
+      if (match && match[1] && match[1].trim().length > 2) {
+        extractedName = match[1].trim().replace(/^(called|named)\s+/i, '');
+      }
+
+      return {
+        explanation: `I can provision and register the new microservice **${extractedName}** into HealOps with Git repository linkage, automated CI/CD pipeline triggers, and Prometheus synthetic probes.`,
+        evidence: [
+          'Cloud-native Kubernetes deployment template prepared',
+          'Default 10-stage DevSecOps pipeline template attached',
+          'Synthetic health endpoint /healthz monitoring configured'
+        ],
+        recommendations: [
+          'Confirm microservice creation to onboard repository',
+          'Configure environment variables and deployment targets'
+        ],
+        confidence: 0.96,
+        risk: 'LOW',
+        action: {
+          type: 'CREATE_PROJECT',
+          title: `Create Project: ${extractedName}`,
+          description: `Register and initialize ${extractedName} microservice in HealOps`,
+          serviceName: extractedName,
+          payload: {
+            name: extractedName,
+            repository: `github.com/enterprise/${extractedName.toLowerCase().replace(/\s+/g, '-')}`,
+            branch: 'main',
+            environment: 'production',
+            description: `Autonomous cloud-native microservice ${extractedName}`
+          }
+        }
+      };
+    }
+
+    // G. SIMULATE INCIDENT REQUEST
+    if (lower.includes('simulate') || lower.includes('incident') || lower.includes('trigger issue') || lower.includes('break')) {
+      return {
+        explanation: 'I can trigger an end-to-end incident simulation on the Payment Service to demonstrate Prometheus anomaly detection, automated Gemini root cause analysis, and self-healing recovery.',
+        evidence: [
+          'Simulates synthetic canary latency spike to 342ms',
+          'Generates Prometheus alert: HTTP 500 error rate > 18%',
+          'Initiates automated 6-step self-healing sequence'
+        ],
+        recommendations: [
+          'Trigger simulation to test on-call alerting and MTTR metrics',
+          'Observe live telemetry waveform and self-healing execution'
+        ],
+        confidence: 0.98,
+        risk: 'HIGH',
+        action: {
+          type: 'SIMULATE_INCIDENT',
+          title: 'Simulate Payment Service Incident',
+          description: 'Trigger synthetic latency regression, Prometheus alert & AI analysis',
+          serviceName: 'Payment Service'
+        }
+      };
+    }
+
+    // H. HEALTH & TELEMETRY INQUIRIES
+    if (lower.includes('health') || lower.includes('status') || lower.includes('metric') || lower.includes('system') || lower.includes('cluster')) {
+      const degraded = context?.servicesHealth?.filter(s => s.status !== 'HEALTHY') || [];
+      const healthy = context?.servicesHealth?.filter(s => s.status === 'HEALTHY') || [];
+
+      return {
+        explanation: `System Posture Overview: ${healthy.length} of ${(context?.servicesHealth || []).length} services are currently HEALTHY. ${degraded.length > 0 ? `${degraded.map(d => d.name).join(', ')} is in a DEGRADED state with active incidents.` : 'All production services are passing SLO targets.'}`,
+        evidence: [
+          `Active Incidents: ${context?.incidents?.filter(i => i.status !== 'RESOLVED').length || 0}`,
+          `Critical Vulnerabilities: ${context?.vulnerabilities?.filter(v => v.severity === 'CRITICAL' && v.status !== 'RESOLVED').length || 0}`,
+          `Average Cluster Response Probe: 34ms`
+        ],
+        recommendations: [
+          degraded.length > 0 ? 'Execute self-healing restart or rollback for degraded services' : 'System healthy. No remediation required.',
+          'Review CI/CD pipeline runs and container scan reports'
+        ],
+        confidence: 0.95,
+        risk: degraded.length > 0 ? 'HIGH' : 'LOW',
+        action: degraded.length > 0 ? {
+          type: 'RESTART_POD',
+          title: `Heal ${degraded[0].name}`,
+          description: `Execute container recycle to restore ${degraded[0].name}`,
+          serviceName: degraded[0].name
+        } : undefined
+      };
+    }
+
+    // DEFAULT CONTEXTUAL COPILOT RESPONSE
     return {
-      explanation: 'DevSecOps telemetry indicates 3 of 4 production services are Healthy. Payment Service is experiencing an active incident with automated healing available.',
+      explanation: `I am your HealOps DevSecOps Copilot. I can execute platform requests such as:
+- **Run CI/CD Pipelines** ("Run pipeline for Payment Service")
+- **Autonomous Rollbacks** ("Rollback Payment deployment")
+- **Container Self-Healing** ("Restart payment pods to clear connection leak")
+- **Security Audits** ("Run security scan for CVEs")
+- **Microservice Provisioning** ("Create new project Billing Service")
+- **Incident Diagnostics** ("Why is the payment service slow?")
+
+What would you like me to execute or diagnose for you?`,
       evidence: [
-        'E-Commerce, Auth, and Analytics services running at 99.9% health',
-        'Self-Healing engine is standing by with a verified 38s MTTR'
+        'Live connection to Express DevSecOps Runtime & Vite Engine',
+        'Prometheus metrics and Kubernetes state synchronized',
+        'Direct action execution enabled'
       ],
-      recommendation: 'Review the active incident #inc-9021 or trigger the self-healing workflow from the dashboard.',
-      confidence: 91,
+      recommendations: [
+        'Ask me to execute any operation or click the suggested action chips below',
+        'Review the incident and deployment centers for recommended remediations'
+      ],
+      confidence: 0.99,
       risk: 'LOW'
     };
   }
 }
+

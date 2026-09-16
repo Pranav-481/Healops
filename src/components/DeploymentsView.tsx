@@ -14,27 +14,64 @@ import {
 } from 'lucide-react';
 import { GlassCard } from './GlassCard';
 import { GlassButton } from './GlassButton';
-import { Deployment } from '../types';
+import { Deployment, Project } from '../types';
+import { Plus } from 'lucide-react';
 
 interface DeploymentsViewProps {
   deployments: Deployment[];
   onRollback: (deployment: Deployment) => void;
   isRollingBack: boolean;
+  onCreateDeployment?: (deploymentData: Partial<Deployment>) => Promise<void> | void;
+  projects?: Project[];
 }
 
 export const DeploymentsView: React.FC<DeploymentsViewProps> = ({
   deployments,
   onRollback,
   isRollingBack,
+  onCreateDeployment,
+  projects = [],
 }) => {
   const [selectedEnv, setSelectedEnv] = useState<string>('ALL');
   const [confirmRollbackDeployment, setConfirmRollbackDeployment] = useState<Deployment | null>(null);
+
+  // New Deployment Modal State
+  const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
+  const [targetProjectId, setTargetProjectId] = useState(projects[0]?.id || 'proj-1');
+  const [version, setVersion] = useState('v2.14.1');
+  const [strategy, setStrategy] = useState<'Canary' | 'Blue-Green' | 'Rolling'>('Canary');
+  const [environment, setEnvironment] = useState<'Production' | 'Staging' | 'Development'>('Production');
+  const [commitMessage, setCommitMessage] = useState('deploy: automated release rollout');
+  const [isDeploying, setIsDeploying] = useState(false);
 
   const environments = ['ALL', 'Production', 'Staging', 'Development'];
 
   const filteredDeployments = deployments.filter(
     (d) => selectedEnv === 'ALL' || d.environment.toLowerCase() === selectedEnv.toLowerCase()
   );
+
+  const handleDeploySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsDeploying(true);
+    try {
+      const proj = projects.find((p) => p.id === targetProjectId);
+      if (onCreateDeployment) {
+        await onCreateDeployment({
+          projectId: targetProjectId,
+          projectName: proj?.name || 'Payment Service',
+          version,
+          strategy,
+          environment: environment as any,
+          commitMessage
+        });
+      }
+      setIsDeployModalOpen(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsDeploying(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -49,21 +86,32 @@ export const DeploymentsView: React.FC<DeploymentsViewProps> = ({
           </p>
         </div>
 
-        {/* Environment Filter */}
-        <div className="flex items-center bg-white/40 border border-white/60 rounded-full p-1 text-xs backdrop-blur-xl shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
-          {environments.map((env) => (
-            <button
-              key={env}
-              onClick={() => setSelectedEnv(env)}
-              className={`btn-apple-glass px-3.5 py-1 rounded-full text-xs tracking-wide transition-all cursor-pointer ${
-                selectedEnv === env
-                  ? 'btn-glass-primary font-bold shadow-xs'
-                  : 'text-slate-600 hover:text-indigo-600 hover:bg-white/60 font-semibold'
-              }`}
-            >
-              {env}
-            </button>
-          ))}
+        {/* Actions & Environment Filter */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <GlassButton
+            variant="primary"
+            size="sm"
+            icon={<Plus className="w-3.5 h-3.5" />}
+            onClick={() => setIsDeployModalOpen(true)}
+          >
+            Deploy Service
+          </GlassButton>
+
+          <div className="flex items-center bg-white/40 border border-white/60 rounded-full p-1 text-xs backdrop-blur-xl shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
+            {environments.map((env) => (
+              <button
+                key={env}
+                onClick={() => setSelectedEnv(env)}
+                className={`btn-apple-glass px-3.5 py-1 rounded-full text-xs tracking-wide transition-all cursor-pointer ${
+                  selectedEnv === env
+                    ? 'btn-glass-primary font-bold shadow-xs'
+                    : 'text-slate-600 hover:text-indigo-600 hover:bg-white/60 font-semibold'
+                }`}
+              >
+                {env}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -201,6 +249,134 @@ export const DeploymentsView: React.FC<DeploymentsViewProps> = ({
                 Confirm Rollback
               </GlassButton>
             </div>
+          </GlassCard>
+        </div>
+      )}
+
+      {/* New Deployment Modal */}
+      {isDeployModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/30 backdrop-blur-md">
+          <GlassCard className="max-w-lg w-full p-6 space-y-4 shadow-2xl border-white/90">
+            <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-display tracking-wide text-slate-900">
+                    Deploy Microservice Release
+                  </h3>
+                  <p className="text-xs text-slate-500">Initiate zero-downtime canary or blue-green rollout</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsDeployModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleDeploySubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Target Microservice *
+                </label>
+                <select
+                  value={targetProjectId}
+                  onChange={(e) => setTargetProjectId(e.target.value)}
+                  className="w-full bg-white/80 border border-slate-200 text-xs sm:text-sm text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400 font-medium cursor-pointer"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.environment})
+                    </option>
+                  ))}
+                  {projects.length === 0 && (
+                    <option value="proj-1">Payment Service (production)</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Release Version *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. v2.14.1"
+                    value={version}
+                    onChange={(e) => setVersion(e.target.value)}
+                    className="w-full bg-white/80 border border-slate-200 text-xs sm:text-sm text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Deployment Strategy
+                  </label>
+                  <select
+                    value={strategy}
+                    onChange={(e) => setStrategy(e.target.value as any)}
+                    className="w-full bg-white/80 border border-slate-200 text-xs sm:text-sm text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400 font-medium cursor-pointer"
+                  >
+                    <option value="Canary">Canary (10% -&gt; 50% -&gt; 100%)</option>
+                    <option value="Blue-Green">Blue-Green (Instant Traffic Cutover)</option>
+                    <option value="Rolling">Rolling (Pod by Pod Zero-Downtime)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Target Environment
+                </label>
+                <select
+                  value={environment}
+                  onChange={(e) => setEnvironment(e.target.value as any)}
+                  className="w-full bg-white/80 border border-slate-200 text-xs sm:text-sm text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400 font-medium cursor-pointer"
+                >
+                  <option value="Production">Production Cluster</option>
+                  <option value="Staging">Staging Cluster</option>
+                  <option value="Development">Development Cluster</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Commit / Release Notes
+                </label>
+                <input
+                  type="text"
+                  placeholder="feat: optimized connection pool & database keep-alives"
+                  value={commitMessage}
+                  onChange={(e) => setCommitMessage(e.target.value)}
+                  className="w-full bg-white/80 border border-slate-200 text-xs sm:text-sm text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-200/60">
+                <GlassButton
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsDeployModalOpen(false)}
+                >
+                  Cancel
+                </GlassButton>
+                <GlassButton
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  isLoading={isDeploying}
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                >
+                  Trigger Deployment
+                </GlassButton>
+              </div>
+            </form>
           </GlassCard>
         </div>
       )}

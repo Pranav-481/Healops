@@ -1,4 +1,8 @@
 import { Pipeline, PipelineStage, PipelineStatus, StageName } from '../../../src/types';
+import { runCommand } from '../core/command-runner';
+import { config } from '../core/config';
+import { mkdir, rm } from 'node:fs/promises';
+import path from 'node:path';
 
 export class PipelineEngine {
   private runningPipelines: Map<string, boolean> = new Map();
@@ -30,7 +34,8 @@ export class PipelineEngine {
   public async executePipeline(
     pipeline: Pipeline,
     shouldFailAtHealthCheck: boolean = false,
-    onProgress?: (updatedPipeline: Pipeline, newLog: string) => void
+    onProgress?: (updatedPipeline: Pipeline, newLog: string) => void,
+    repository?: string
   ): Promise<Pipeline> {
     pipeline.status = 'RUNNING';
     pipeline.startedAt = 'Just now';
@@ -100,13 +105,23 @@ export class PipelineEngine {
       const stage = pipeline.stages[i];
       stage.status = 'RUNNING';
 
-      const stageLogs = logMessages[stage.name] || ['Executing stage tasks...'];
-      for (const log of stageLogs) {
-        stage.logs.push(log);
-        if (onProgress) {
-          onProgress(pipeline, log);
+      try {
+        const stageLogs = config.demoMode
+          ? logMessages[stage.name] || ['Executing stage tasks...']
+          : await this.executeLiveStage(stage.name, pipeline, shouldFailAtHealthCheck, repository);
+        for (const log of stageLogs) {
+          stage.logs.push(log);
+          if (onProgress) onProgress(pipeline, log);
         }
-        await new Promise((r) => setTimeout(r, 350));
+      } catch (error) {
+        stage.status = 'FAILED';
+        stage.error = error instanceof Error ? error.message : 'Unknown stage failure';
+        stage.logs.push(stage.error);
+        pipeline.status = 'FAILED';
+        pipeline.completedAt = new Date().toISOString();
+        this.runningPipelines.delete(pipeline.id);
+        if (onProgress) onProgress(pipeline, stage.error);
+        return pipeline;
       }
 
       // Check if this is health check and failure is requested
@@ -148,5 +163,37 @@ export class PipelineEngine {
       return true;
     }
     return false;
+  }
+
+  private async executeLiveStage(stage: StageName, pipeline: Pipeline, forceHealthCheckFailure: boolean, repository?: string): Promise<string[]> {
+    const workspace = path.join(config.workspaceRoot, pipeline.id);
+    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    if (stage === 'SOURCE') {
+      await rm(workspace, { recursive: true, force: true });
+      await mkdir(config.workspaceRoot, { recursive: true });
+      const projectUrl = repository || pipeline.projectName;
+      if (!/^https:\/\/|^git@/.test(projectUrl)) throw new Error('Project repository must be an HTTPS or SSH Git URL.');
+      return (await runCommand('git', ['clone', '--depth', '1', '--branch', pipeline.branch, projectUrl, workspace])).output;
+    }
+    if (stage === 'BUILD') return (await runCommand(npm, ['ci'], workspace)).output;
+    if (stage === 'UNIT_TEST') return (await runCommand(npm, ['test', '--', '--runInBand'], workspace)).output;
+    if (stage === 'SAST') return (await runCommand('semgrep', ['scan', '--config', 'auto', workspace])).output;
+    if (stage === 'DEPENDENCY_SCAN') return (await runCommand('trivy', ['fs', '--exit-code', '1', workspace])).output;
+    if (stage === 'SECRET_SCAN') return (await runCommand('gitleaks', ['detect', '--source', workspace, '--no-git'], workspace)).output;
+    if (stage === 'DOCKER_BUILD') {
+      if (!config.containerRegistry) throw new Error('CONTAINER_REGISTRY is required for live Docker builds.');
+      const image = `${config.containerRegistry}/${pipeline.projectId}:${pipeline.commitHash}`;
+      return (await runCommand('docker', ['build', '--tag', image, '.'], workspace)).output;
+    }
+    if (stage === 'CONTAINER_SCAN') return ['Container scan runs during image policy enforcement; configure a registry scanner for your platform.'];
+    if (stage === 'DEPLOY') return (await runCommand(config.kubectlBin, ['rollout', 'status', `deployment/${pipeline.projectId}`, '--namespace', config.namespace])).output;
+    if (stage === 'HEALTH_CHECK') {
+      if (forceHealthCheckFailure) throw new Error('Synthetic health-check failure was explicitly requested.');
+      if (!config.prometheusUrl) throw new Error('PROMETHEUS_URL is required for live health checks.');
+      const response = await fetch(`${config.prometheusUrl}/api/v1/query?query=up`);
+      if (!response.ok) throw new Error(`Prometheus health query failed with HTTP ${response.status}`);
+      return ['Prometheus health query completed successfully.'];
+    }
+    return [];
   }
 }

@@ -21,15 +21,51 @@ interface ProjectsViewProps {
   projects: Project[];
   onSelectProject?: (projectId: string) => void;
   onNavigateTab?: (tab: string) => void;
+  onCreateProject?: (projectData: Partial<Project>) => Promise<void> | void;
 }
 
 export const ProjectsView: React.FC<ProjectsViewProps> = ({
   projects,
-  onNavigateTab
+  onNavigateTab,
+  onCreateProject
 }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'HEALTHY' | 'DEGRADED' | 'CRITICAL'>('ALL');
   const [envFilter, setEnvFilter] = useState<'ALL' | 'production' | 'staging' | 'development'>('ALL');
+
+  // New Project Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [repository, setRepository] = useState('');
+  const [branch, setBranch] = useState('main');
+  const [environment, setEnvironment] = useState<'development' | 'testing' | 'staging' | 'production'>('production');
+  const [description, setDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setIsSubmitting(true);
+    try {
+      if (onCreateProject) {
+        await onCreateProject({
+          name,
+          repository: repository || `github.com/enterprise/${name.toLowerCase().replace(/\s+/g, '-')}`,
+          branch: branch || 'main',
+          environment,
+          description: description || `Managed microservice ${name}`
+        });
+      }
+      setIsModalOpen(false);
+      setName('');
+      setRepository('');
+      setDescription('');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const filteredProjects = projects.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -62,7 +98,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
             variant="primary" 
             size="sm" 
             icon={<Plus className="w-3.5 h-3.5" />}
-            onClick={() => alert('New Service Onboarding: Connect GitHub / GitLab repository via webhook')}
+            onClick={() => setIsModalOpen(true)}
           >
             New Project
           </GlassButton>
@@ -235,6 +271,124 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
           );
         })}
       </div>
+
+      {/* New Project Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/30 backdrop-blur-md">
+          <GlassCard className="max-w-lg w-full p-6 space-y-4 shadow-2xl border-white/90">
+            <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600">
+                  <FolderGit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold font-display tracking-wide text-slate-900">
+                    Register New Microservice
+                  </h3>
+                  <p className="text-xs text-slate-500">Connect Git repository and configure telemetry</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateSubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Service / Project Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Order Processing Service"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full bg-white/80 border border-slate-200 text-xs sm:text-sm text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Git Repository URL
+                </label>
+                <input
+                  type="text"
+                  placeholder="github.com/enterprise/order-processing"
+                  value={repository}
+                  onChange={(e) => setRepository(e.target.value)}
+                  className="w-full bg-white/80 border border-slate-200 text-xs sm:text-sm text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400 font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Default Branch
+                  </label>
+                  <input
+                    type="text"
+                    value={branch}
+                    onChange={(e) => setBranch(e.target.value)}
+                    className="w-full bg-white/80 border border-slate-200 text-xs sm:text-sm text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Environment
+                  </label>
+                  <select
+                    value={environment}
+                    onChange={(e) => setEnvironment(e.target.value as any)}
+                    className="w-full bg-white/80 border border-slate-200 text-xs sm:text-sm text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400 font-medium cursor-pointer"
+                  >
+                    <option value="production">Production</option>
+                    <option value="staging">Staging</option>
+                    <option value="development">Development</option>
+                    <option value="testing">Testing</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Service Description
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="High-throughput payment gateway processing synchronous transactions..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full bg-white/80 border border-slate-200 text-xs text-slate-900 rounded-xl px-3.5 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-200/60">
+                <GlassButton
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsModalOpen(false)}
+                >
+                  Cancel
+                </GlassButton>
+                <GlassButton
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  isLoading={isSubmitting}
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                >
+                  Create Microservice
+                </GlassButton>
+              </div>
+            </form>
+          </GlassCard>
+        </div>
+      )}
     </div>
   );
 };
