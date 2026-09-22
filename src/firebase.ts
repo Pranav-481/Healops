@@ -32,3 +32,24 @@ export const ensureFirebaseAuth = async () => {
 };
 
 export default app;
+export const apiFetch = async (
+    endpoint: string,
+    options: RequestInit = {}
+) => {
+    const user = await ensureFirebaseAuth();
+
+    const token = await user.getIdToken();
+
+    const headers = new Headers(options.headers);
+
+    headers.set("Authorization", `Bearer ${token}`);
+    headers.set("Content-Type", "application/json");
+
+    const apiBaseUrl =
+        import.meta.env.VITE_API_BASE_URL || "";
+
+    return fetch(`${apiBaseUrl}${endpoint}`, {
+        ...options,
+        headers,
+    });
+};

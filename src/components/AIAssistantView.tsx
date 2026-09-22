@@ -1,3 +1,4 @@
+import { apiFetch } from '../firebase';
 import React, { useState } from 'react';
 import {
   Bot,
@@ -117,7 +118,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/ai/chat', {
+      const res = await apiFetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -249,10 +250,9 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({
                 <div
                   className={`
                     max-w-2xl p-4 rounded-2xl text-xs sm:text-sm leading-relaxed border shadow-xs backdrop-blur-xl
-                    ${
-                      isUser
-                        ? 'bg-slate-900 text-white border-slate-700 shadow-md'
-                        : 'bg-white/85 text-slate-800 border-white/95 shadow-xs'
+                    ${isUser
+                      ? 'bg-slate-900 text-white border-slate-700 shadow-md'
+                      : 'bg-white/85 text-slate-800 border-white/95 shadow-xs'
                     }
                   `}
                 >

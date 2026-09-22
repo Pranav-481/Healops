@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
-import { db, ensureFirebaseAuth } from './firebase';
+import { db, ensureFirebaseAuth, apiFetch } from './firebase';
 import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { ProjectsView } from './components/ProjectsView';
@@ -100,11 +100,11 @@ export default function App() {
         }
 
         const [pipeRes, depRes, vulnRes, incRes, healthRes] = await Promise.all([
-          fetch('/api/pipelines').then((r) => r.json()).catch(() => null),
-          fetch('/api/deployments').then((r) => r.json()).catch(() => null),
-          fetch('/api/security/vulnerabilities').then((r) => r.json()).catch(() => null),
-          fetch('/api/incidents').then((r) => r.json()).catch(() => null),
-          fetch('/api/monitoring/health').then((r) => r.json()).catch(() => null),
+          apiFetch('/api/pipelines').then((r) => r.json()).catch(() => null),
+          apiFetch('/api/deployments').then((r) => r.json()).catch(() => null),
+          apiFetch('/api/security/vulnerabilities').then((r) => r.json()).catch(() => null),
+          apiFetch('/api/incidents').then((r) => r.json()).catch(() => null),
+          apiFetch('/api/monitoring/health').then((r) => r.json()).catch(() => null),
         ]);
 
         if (pipeRes?.data) setPipelines(pipeRes.data);
@@ -206,7 +206,7 @@ export default function App() {
   const handleSimulateIncident = async () => {
     setIsSimulatingIncident(true);
     try {
-      const res = await fetch('/api/incidents/simulate', { method: 'POST' });
+      const res = await apiFetch('/api/incidents/simulate', { method: 'POST' });
       const data = await res.json();
       if (data?.data) {
         setIncidents((prev) => [data.data, ...prev.filter((i) => i.id !== data.data.id)]);
@@ -226,7 +226,7 @@ export default function App() {
   ) => {
     setIsPipelineRunning(true);
     try {
-      const res = await fetch('/api/pipelines/pipe-501/run', {
+      const res = await apiFetch('/api/pipelines/pipe-501/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -252,7 +252,7 @@ export default function App() {
   const handleRollbackDeployment = async (dep: Deployment) => {
     setIsRollingBack(true);
     try {
-      const res = await fetch(`/api/deployments/${dep.id}/rollback`, { method: 'POST' });
+      const res = await apiFetch(`/api/deployments/${dep.id}/rollback`, { method: 'POST' });
       const data = await res.json();
       if (data?.data) {
         setDeployments((prev) => prev.map((d) => (d.id === dep.id ? data.data : d)));
@@ -269,7 +269,7 @@ export default function App() {
   const handleExecuteHealing = async (incident: Incident, action: HealingAction) => {
     setIsHealingExecuting(true);
     try {
-      const res = await fetch('/api/self-healing/execute', {
+      const res = await apiFetch('/api/self-healing/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ incidentId: incident.id, actionId: action.id })
@@ -299,7 +299,7 @@ export default function App() {
   const handleTriggerScan = async () => {
     setIsScanning(true);
     try {
-      await fetch('/api/security/scan', { method: 'POST' });
+      await apiFetch('/api/security/scan', { method: 'POST' });
       showToast('Security Audit Completed', 'Scanned 412 packages across container layers.', 'success');
     } catch (err) {
       console.error('Scan error:', err);
@@ -311,7 +311,7 @@ export default function App() {
   // 6. Resolve Vulnerability
   const handleResolveVuln = async (id: string) => {
     try {
-      await fetch(`/api/security/vulnerabilities/${id}/resolve`, { method: 'PUT' });
+      await apiFetch(`/api/security/vulnerabilities/${id}/resolve`, { method: 'PUT' });
       setVulnerabilities((prev) =>
         prev.map((v) => (v.id === id ? { ...v, status: 'RESOLVED' } : v))
       );

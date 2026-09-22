@@ -96,12 +96,17 @@ async function startServer() {
   app.use(
     cors({
       origin(origin, callback) {
+        const allowedOrigins = [
+          ...config.allowedOrigins,
+          'https://healops-26918.web.app',
+        ];
+
         callback(
           null,
-          !origin || config.allowedOrigins.includes(origin)
+          !origin || allowedOrigins.includes(origin)
         );
       },
-      credentials: false
+      credentials: false,
     })
   );
 
