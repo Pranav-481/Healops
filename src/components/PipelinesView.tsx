@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Play,
   CheckCircle2,
@@ -43,6 +43,13 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({
   const [isLogPaused, setIsLogPaused] = useState(false);
   const [copiedLog, setCopiedLog] = useState(false);
 
+  // Sync selected pipeline ID when pipelines change
+  useEffect(() => {
+    if (pipelines.length > 0 && !pipelines.some((p) => p.id === selectedPipelineId)) {
+      setSelectedPipelineId(pipelines[0].id);
+    }
+  }, [pipelines, selectedPipelineId]);
+
   // Custom Run Modal State
   const [isCustomRunModalOpen, setIsCustomRunModalOpen] = useState(false);
   const [targetProjectId, setTargetProjectId] = useState(projects[0]?.id || 'proj-1');
@@ -52,6 +59,10 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({
 
   const selectedPipeline =
     pipelines.find((p) => p.id === selectedPipelineId) || pipelines[0];
+
+  const stages: PipelineStage[] = Array.isArray(selectedPipeline?.stages)
+    ? selectedPipeline.stages
+    : [];
 
   const filteredLogs = terminalLogs.filter((l) =>
     l.message.toLowerCase().includes(logSearch.toLowerCase())
@@ -127,14 +138,28 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({
       </div>
 
       {/* Selected Pipeline Execution Header */}
-      {selectedPipeline && (
+      {selectedPipeline ? (
         <GlassCard className="p-5">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/60 pb-4">
             <div className="space-y-1.5">
               <div className="flex items-center gap-2.5 flex-wrap">
-                <span className="text-xs font-mono text-slate-800 font-bold bg-white/90 px-2.5 py-0.5 rounded-lg border border-white shadow-xs">
-                  #{selectedPipeline.id}
-                </span>
+                {pipelines.length > 1 ? (
+                  <select
+                    value={selectedPipeline.id}
+                    onChange={(e) => setSelectedPipelineId(e.target.value)}
+                    className="text-xs font-mono text-slate-800 font-bold bg-white/90 px-2.5 py-1 rounded-lg border border-white shadow-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 cursor-pointer"
+                  >
+                    {pipelines.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        #{p.id} - {p.projectName} ({p.status})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-xs font-mono text-slate-800 font-bold bg-white/90 px-2.5 py-0.5 rounded-lg border border-white shadow-xs">
+                    #{selectedPipeline.id}
+                  </span>
+                )}
                 <h2 className="text-base sm:text-lg font-bold font-display tracking-wide text-slate-900">
                   {selectedPipeline.projectName}
                 </h2>
@@ -153,10 +178,10 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({
               <p className="text-xs text-slate-600 flex items-center gap-3">
                 <span className="flex items-center gap-1 font-mono text-slate-500">
                   <GitCommit className="w-3.5 h-3.5 text-slate-700" />
-                  {selectedPipeline.commitHash}
+                  {selectedPipeline.commitHash || 'pending'}
                 </span>
                 <span className="text-slate-700 font-medium">
-                  "{selectedPipeline.commitMessage}"
+                  "{selectedPipeline.commitMessage || 'Automated Pipeline Run'}"
                 </span>
               </p>
             </div>
@@ -164,15 +189,15 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({
             <div className="flex items-center gap-4 text-xs text-slate-600 font-mono">
               <div className="flex items-center gap-1.5">
                 <GitBranch className="w-3.5 h-3.5 text-slate-700" />
-                <span>{selectedPipeline.branch}</span>
+                <span>{selectedPipeline.branch || 'main'}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <UserIcon className="w-3.5 h-3.5 text-slate-500" />
-                <span>{selectedPipeline.author}</span>
+                <span>{selectedPipeline.author || 'System'}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-slate-500" />
-                <span>{selectedPipeline.durationSeconds}s</span>
+                <span>{selectedPipeline.durationSeconds ?? 0}s</span>
               </div>
             </div>
           </div>
@@ -183,53 +208,78 @@ export const PipelinesView: React.FC<PipelinesViewProps> = ({
               10-Stage Execution Matrix
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2.5">
-              {selectedPipeline.stages.map((stage, idx) => {
-                const isStageRunning = stage.status === 'RUNNING';
-                const isStageFailed = stage.status === 'FAILED';
-                const isStageSuccess = stage.status === 'SUCCESS';
+            {stages.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2.5">
+                {stages.map((stage, idx) => {
+                  const isStageRunning = stage.status === 'RUNNING';
+                  const isStageFailed = stage.status === 'FAILED';
+                  const isStageSuccess = stage.status === 'SUCCESS';
 
-                return (
-                  <div
-                    key={stage.name}
-                    className={`
-                      btn-popup p-2.5 rounded-xl border flex flex-col justify-between backdrop-blur-md transition-all
-                      ${
-                        isStageRunning
-                          ? 'bg-slate-900 text-white border-slate-700 shadow-md'
-                          : isStageFailed
-                          ? 'bg-rose-50/90 border-rose-400/60 shadow-xs text-slate-800'
-                          : isStageSuccess
-                          ? 'bg-white/70 border-white/90 hover:border-white hover:bg-white shadow-xs text-slate-800'
-                          : 'bg-white/40 border-white/50 opacity-60 text-slate-700'
-                      }
-                    `}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[10px] font-mono opacity-70">
-                        {String(idx + 1).padStart(2, '0')}
-                      </span>
-                      {getStageIcon(stage.status)}
-                    </div>
-
-                    <div>
-                      <div className="text-xs font-bold truncate">
-                        {stage.name.replace('_', ' ')}
+                  return (
+                    <div
+                      key={stage.id || stage.name || idx}
+                      className={`
+                        btn-popup p-2.5 rounded-xl border flex flex-col justify-between backdrop-blur-md transition-all
+                        ${
+                          isStageRunning
+                            ? 'bg-slate-900 text-white border-slate-700 shadow-md'
+                            : isStageFailed
+                            ? 'bg-rose-50/90 border-rose-400/60 shadow-xs text-slate-800'
+                            : isStageSuccess
+                            ? 'bg-white/70 border-white/90 hover:border-white hover:bg-white shadow-xs text-slate-800'
+                            : 'bg-white/40 border-white/50 opacity-60 text-slate-700'
+                        }
+                      `}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-mono opacity-70">
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                        {getStageIcon(stage.status)}
                       </div>
-                      <div className="text-[10px] opacity-75 truncate mt-0.5">
-                        {stage.displayName}
+
+                      <div>
+                        <div className="text-xs font-bold truncate">
+                          {(stage.name || '').replace('_', ' ')}
+                        </div>
+                        <div className="text-[10px] opacity-75 truncate mt-0.5">
+                          {stage.displayName || stage.name}
+                        </div>
+                      </div>
+
+                      <div className="mt-2.5 pt-1.5 border-t border-current/20 text-[10px] font-mono flex justify-between">
+                        <span className="font-semibold">{stage.status}</span>
+                        <span>{stage.durationSeconds && stage.durationSeconds > 0 ? `${stage.durationSeconds}s` : '--'}</span>
                       </div>
                     </div>
-
-                    <div className="mt-2.5 pt-1.5 border-t border-current/20 text-[10px] font-mono flex justify-between">
-                      <span className="font-semibold">{stage.status}</span>
-                      <span>{stage.durationSeconds > 0 ? `${stage.durationSeconds}s` : '--'}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-6 rounded-2xl bg-white/40 border border-white/70 text-center text-xs text-slate-500 backdrop-blur-md">
+                No stage execution data recorded for this pipeline.
+              </div>
+            )}
           </div>
+        </GlassCard>
+      ) : (
+        <GlassCard className="p-8 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mx-auto mb-3">
+            <Play className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-bold font-display text-slate-900 mb-1">No Active Pipelines</h3>
+          <p className="text-xs text-slate-500 mb-4 max-w-md mx-auto">
+            No pipeline runs are currently in the system. Trigger a build to start automated verification.
+          </p>
+          <GlassButton
+            variant="primary"
+            size="sm"
+            icon={<Play className="w-3.5 h-3.5" />}
+            isLoading={isRunning}
+            onClick={() => onTriggerPipeline(false)}
+          >
+            Run Default Pipeline
+          </GlassButton>
         </GlassCard>
       )}
 

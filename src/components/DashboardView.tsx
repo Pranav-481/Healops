@@ -16,10 +16,12 @@ import {
   CreditCard,
   RefreshCw,
   Clock,
-  Radio
+  Radio,
+  Plus
 } from 'lucide-react';
 import { GlassCard } from './GlassCard';
 import { GlassButton } from './GlassButton';
+import { CreateProjectModal } from './CreateProjectModal';
 import { Project, Pipeline, Incident, ServiceHealth } from '../types';
 
 interface DashboardViewProps {
@@ -29,6 +31,7 @@ interface DashboardViewProps {
   servicesHealth: ServiceHealth[];
   onNavigateTab: (tab: string) => void;
   onOpenAIAnalysis: (incident: Incident) => void;
+  onCreateProject?: (projectData: Partial<Project>) => Promise<void> | void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -38,8 +41,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   servicesHealth,
   onNavigateTab,
   onOpenAIAnalysis,
+  onCreateProject,
 }) => {
   const [timeFilter, setTimeFilter] = useState<'24H' | '7D' | '30D'>('24H');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const runningPipelines = pipelines.filter((p) => p.status === 'RUNNING').length;
   const activeIncidents = incidents.filter((i) => i.status !== 'RESOLVED').length;
@@ -94,6 +99,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             onClick={() => window.location.reload()}
           >
             Refresh
+          </GlassButton>
+
+          <GlassButton
+            id="create-project-btn"
+            variant="primary"
+            size="sm"
+            icon={<Plus className="w-4 h-4" />}
+            onClick={() => setIsCreateModalOpen(true)}
+          >
+            Create Project
           </GlassButton>
         </div>
       </div>
@@ -401,6 +416,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </GlassCard>
       </div>
+
+      {/* Create Project Modal */}
+      <CreateProjectModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onCreateProject={onCreateProject}
+      />
     </div>
   );
 };

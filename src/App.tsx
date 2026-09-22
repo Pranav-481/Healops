@@ -2,8 +2,9 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-
 import React, { useState, useEffect } from 'react';
+import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
+import { db, ensureFirebaseAuth } from './firebase';
 import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { ProjectsView } from './components/ProjectsView';
@@ -84,8 +85,21 @@ export default function App() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [projRes, pipeRes, depRes, vulnRes, incRes, healthRes] = await Promise.all([
-          fetch('/api/projects').then((r) => r.json()).catch(() => null),
+        await ensureFirebaseAuth();
+
+        const projectSnapshot = await getDocs(
+          collection(db, 'projects')
+        );
+
+        const firestoreProjects = projectSnapshot.docs.map(
+          (docSnap) => docSnap.data() as Project
+        );
+
+        if (firestoreProjects.length > 0) {
+          setProjects(firestoreProjects);
+        }
+
+        const [pipeRes, depRes, vulnRes, incRes, healthRes] = await Promise.all([
           fetch('/api/pipelines').then((r) => r.json()).catch(() => null),
           fetch('/api/deployments').then((r) => r.json()).catch(() => null),
           fetch('/api/security/vulnerabilities').then((r) => r.json()).catch(() => null),
@@ -93,16 +107,19 @@ export default function App() {
           fetch('/api/monitoring/health').then((r) => r.json()).catch(() => null),
         ]);
 
-        if (projRes?.data) setProjects(projRes.data);
         if (pipeRes?.data) setPipelines(pipeRes.data);
         if (depRes?.data) setDeployments(depRes.data);
         if (vulnRes?.data) setVulnerabilities(vulnRes.data);
         if (incRes?.data) setIncidents(incRes.data);
-        if (healthRes?.data?.services) setServicesHealth(healthRes.data.services);
+        if (healthRes?.data?.services) {
+          setServicesHealth(healthRes.data.services);
+        }
+
       } catch (err) {
-        console.warn('Backend load warning:', err);
+        console.warn('Firebase/backend load warning:', err);
       }
     }
+
     loadData();
   }, []);
 
@@ -166,6 +183,11 @@ export default function App() {
         setIsHealingExecuting(false);
         showToast('Self-Healing Verified', `${action.actionType} completed. Cluster healthy.`, 'heal');
       });
+
+      eventSource.addEventListener('project:created', (e: any) => {
+        const project: Project = JSON.parse(e.data).payload;
+        setProjects((prev) => [project, ...prev.filter((p) => p.id !== project.id)]);
+      });
     } catch (err) {
       console.warn('SSE stream inactive, using direct event hooks:', err);
     }
@@ -198,13 +220,22 @@ export default function App() {
   };
 
   // 2. Trigger Pipeline Workflow
-  const handleTriggerPipeline = async (failHealthCheck: boolean = false) => {
+  const handleTriggerPipeline = async (
+    failHealthCheck: boolean = false,
+    customOptions?: { projectId?: string; projectName?: string; commitMessage?: string; branch?: string }
+  ) => {
     setIsPipelineRunning(true);
     try {
       const res = await fetch('/api/pipelines/pipe-501/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ failHealthCheck })
+        body: JSON.stringify({
+          failHealthCheck,
+          projectId: customOptions?.projectId,
+          projectName: customOptions?.projectName,
+          commitMessage: customOptions?.commitMessage,
+          branch: customOptions?.branch
+        })
       });
       const data = await res.json();
       if (data?.data) {
@@ -249,10 +280,10 @@ export default function App() {
           prev.map((inc) =>
             inc.id === incident.id
               ? {
-                  ...inc,
-                  status: 'RESOLVED',
-                  healingActions: inc.healingActions.map((a) => (a.id === action.id ? data.data.action : a))
-                }
+                ...inc,
+                status: 'RESOLVED',
+                healingActions: inc.healingActions.map((a) => (a.id === action.id ? data.data.action : a))
+              }
               : inc
           )
         );
@@ -287,6 +318,68 @@ export default function App() {
       showToast('Vulnerability Resolved', 'CVE status updated in inventory', 'success');
     } catch (err) {
       console.error('Resolve error:', err);
+    }
+  };
+
+  // 7. Create Project Workflow
+  const handleCreateProject = async (projectData: Partial<Project>) => {
+    let repo = projectData.repository || '';
+
+    if (!repo) {
+      repo = `https://github.com/enterprise/${(projectData.name || 'service')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')}`;
+    } else if (
+      !repo.startsWith('http://') &&
+      !repo.startsWith('https://') &&
+      !repo.startsWith('git@')
+    ) {
+      repo = `https://${repo}`;
+    }
+
+    const newProject: Project = {
+      id: `proj-${Date.now()}`,
+      name: projectData.name || 'New Service',
+      repository: repo,
+      branch: projectData.branch || 'main',
+      environment: projectData.environment || 'production',
+      description:
+        projectData.description ||
+        `Managed microservice ${projectData.name || 'New Service'}`,
+      healthScore: 100,
+      securityScore: 0,
+      status: 'HEALTHY',
+      lastDeployment: 'Never',
+      lastPipelineStatus: 'PENDING',
+    };
+
+    try {
+      await ensureFirebaseAuth();
+
+      await setDoc(
+        doc(db, 'projects', newProject.id),
+        newProject
+      );
+
+      setProjects((prev) => [
+        newProject,
+        ...prev.filter((p) => p.id !== newProject.id),
+      ]);
+
+      showToast(
+        'Project Created',
+        `${newProject.name} registered and stored in Firebase`,
+        'success'
+      );
+
+    } catch (err: any) {
+      console.error('Firebase project creation failed:', err);
+
+      showToast(
+        'Project Creation Failed',
+        err?.message || 'Unable to save project to Firebase',
+        'alert'
+      );
     }
   };
 
@@ -327,6 +420,7 @@ export default function App() {
             servicesHealth={servicesHealth}
             onNavigateTab={setActiveTab}
             onOpenAIAnalysis={() => setActiveTab('incidents')}
+            onCreateProject={handleCreateProject}
           />
         )}
 
@@ -334,6 +428,7 @@ export default function App() {
           <ProjectsView
             projects={projects}
             onNavigateTab={setActiveTab}
+            onCreateProject={handleCreateProject}
           />
         )}
 
@@ -343,6 +438,7 @@ export default function App() {
             terminalLogs={terminalLogs}
             onTriggerPipeline={handleTriggerPipeline}
             isRunning={isPipelineRunning}
+            projects={projects}
           />
         )}
 
@@ -403,7 +499,7 @@ export default function App() {
         )}
 
         {activeTab === 'aiAssistant' && (
-          <AIAssistantView />
+          <AIAssistantView onCreateProject={handleCreateProject} />
         )}
 
         {activeTab === 'team' && (
