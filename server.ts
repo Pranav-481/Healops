@@ -1925,7 +1925,7 @@ async function startServer() {
         `[HealOps] ${config.demoMode
           ? 'DEMO'
           : 'LIVE'
-        } server listening on http://localhost:${config.port}`
+        } server listening on 0.0.0.0:${config.port}`
       )
   );
 }
