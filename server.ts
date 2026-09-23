@@ -319,7 +319,8 @@ async function startServer() {
 
   const operationalRoles: UserRole[] = [
     'ADMIN',
-    'DEVOPS_ENGINEER'
+    'DEVOPS_ENGINEER',
+    'DEVELOPER'
   ];
 
   /*
