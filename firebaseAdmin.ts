@@ -23,4 +23,4 @@ const app =
         });
 
 export const db = getFirestore(app);
-export const firebaseAuth = getAuth(app);
+export const adminAuth = getAuth(app);

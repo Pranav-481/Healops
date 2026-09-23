@@ -9,3 +9,4 @@ coverage/
 .env*
 !.env.example
 firebase-service-account.json
+.firebase/

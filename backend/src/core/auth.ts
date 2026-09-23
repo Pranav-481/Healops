@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { User, UserRole } from '../../../src/types';
 import { config } from './config';
-import { firebaseAuth } from '../../../firebaseAdmin';
+import { adminAuth } from '../../../firebaseAdmin';
 
 declare global {
   namespace Express {
@@ -83,7 +83,7 @@ export async function authenticate(
 
   // Otherwise verify the token as a Firebase ID token.
   try {
-    const decoded = await firebaseAuth.verifyIdToken(token);
+    const decoded = await adminAuth.verifyIdToken(token);
 
     const claimRole = decoded.role as UserRole | undefined;
 
